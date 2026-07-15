@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Trash2,
   X,
-  Shield
+  Shield,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SubscriptionTier, UserProfile, AppNotification, UserRole } from '../types';
@@ -33,6 +34,7 @@ interface PhoneFrameProps {
   setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
   activeToast: AppNotification | null;
   setActiveToast: (toast: AppNotification | null) => void;
+  isAppFullyActive?: boolean;
 }
 
 export default function PhoneFrame({ 
@@ -46,7 +48,8 @@ export default function PhoneFrame({
   notifications,
   setNotifications,
   activeToast,
-  setActiveToast
+  setActiveToast,
+  isAppFullyActive = true
 }: PhoneFrameProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNotificationAlert, setShowNotificationAlert] = useState(false);
@@ -130,6 +133,19 @@ export default function PhoneFrame({
             </p>
           </div>
 
+          {/* LOCK WARNING */}
+          {!isAppFullyActive && (
+            <div className="p-3.5 bg-amber-400/10 border border-amber-400/20 rounded-2xl text-xs space-y-1 text-amber-200">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Lock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <span>Simulations verrouillées</span>
+              </div>
+              <p className="text-[10px] text-blue-100/80 leading-normal">
+                Veuillez d'abord vous connecter ou activer votre licence pour déverrouiller les simulations de profil.
+              </p>
+            </div>
+          )}
+
           {/* PROFILE CONTROL / TIER CHANGER */}
           <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
             <span className="text-xs font-bold text-blue-200 block mb-2.5 uppercase tracking-wider">
@@ -139,11 +155,14 @@ export default function PhoneFrame({
               {(['Gratuit', 'Premium', 'VIP', 'Vendeuse'] as SubscriptionTier[]).map((tier) => (
                 <button
                   key={tier}
+                  disabled={!isAppFullyActive}
                   onClick={() => setSubscriptionTier(tier)}
                   className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all text-left flex items-center justify-between ${
-                    currentUser.tier === tier
-                      ? 'bg-[#40D1FF] border-[#40D1FF] text-blue-950 shadow-md shadow-blue-950/20'
-                      : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20'
+                    !isAppFullyActive 
+                      ? 'bg-white/2 border-white/5 text-white/30 cursor-not-allowed'
+                      : currentUser.tier === tier
+                        ? 'bg-[#40D1FF] border-[#40D1FF] text-blue-950 shadow-md shadow-blue-950/20'
+                        : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20'
                   }`}
                 >
                   <span>
@@ -152,7 +171,7 @@ export default function PhoneFrame({
                     {tier === 'VIP' && '💎 VIP'}
                     {tier === 'Vendeuse' && '🤝 Vendeuse'}
                   </span>
-                  {currentUser.tier === tier && (
+                  {isAppFullyActive && currentUser.tier === tier && (
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-950" />
                   )}
                 </button>
@@ -169,15 +188,18 @@ export default function PhoneFrame({
               {(['Membre', 'Admin', 'Super Admin'] as UserRole[]).map((role) => (
                 <button
                   key={role}
+                  disabled={!isAppFullyActive}
                   onClick={() => {
                     if (setCurrentUser) {
                       setCurrentUser(prev => ({ ...prev, role }));
                     }
                   }}
                   className={`py-2 px-1 rounded-xl text-[10px] font-bold border transition-all text-center flex flex-col items-center justify-center gap-1 ${
-                    (currentUser.role || 'Membre') === role
-                      ? 'bg-amber-400 border-amber-400 text-slate-950 shadow-md'
-                      : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20'
+                    !isAppFullyActive
+                      ? 'bg-white/2 border-white/5 text-white/30 cursor-not-allowed'
+                      : (currentUser.role || 'Membre') === role
+                        ? 'bg-amber-400 border-amber-400 text-slate-950 shadow-md'
+                        : 'bg-white/5 border-white/10 text-white hover:bg-white/10 hover:border-white/20'
                   }`}
                 >
                   <span>
@@ -226,19 +248,19 @@ export default function PhoneFrame({
           <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-xs space-y-2 text-blue-100">
             <div className="flex justify-between">
               <span className="opacity-80">Utilisateur actif :</span>
-              <span className="text-white font-bold">{currentUser.name}</span>
+              <span className="text-white font-bold">{isAppFullyActive ? currentUser.name : 'Non connecté'}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-80">Solde :</span>
-              <span className="text-[#40D1FF] font-bold">{currentUser.walletBalance.toLocaleString('fr-FR')} FCFA</span>
+              <span className="text-[#40D1FF] font-bold">{isAppFullyActive ? `${currentUser.walletBalance.toLocaleString('fr-FR')} FCFA` : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-80">Code Parrainage :</span>
-              <span className="text-white font-mono font-bold">{currentUser.referralCode}</span>
+              <span className="text-white font-mono font-bold">{isAppFullyActive ? currentUser.referralCode : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="opacity-80">Score de Fiabilité :</span>
-              <span className="text-[#40D1FF] font-bold">⭐ {currentUser.reliabilityScore}%</span>
+              <span className="text-[#40D1FF] font-bold">{isAppFullyActive ? `⭐ ${currentUser.reliabilityScore}%` : '—'}</span>
             </div>
           </div>
           
@@ -281,12 +303,12 @@ export default function PhoneFrame({
         }`}>
           
           {/* Internal Simulated Header (Sticky to screen top) */}
-          {currentUser && currentUser.id !== '' && currentUser.status !== 'En attente' && (
+          {isAppFullyActive && currentUser && currentUser.id !== '' && currentUser.status !== 'En attente' && (
             <div className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3.5 flex justify-between items-center z-30 shadow-sm">
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <img 
-                    src={currentUser.avatar} 
+                    src={currentUser.avatar || undefined} 
                     alt="Avatar" 
                     className="w-9 h-9 rounded-full object-cover ring-2 ring-[#0175C2]"
                   />
@@ -614,7 +636,7 @@ export default function PhoneFrame({
         </div>
 
         {/* BOTTOM SIMULATED NAVIGATION BAR */}
-        {currentUser && currentUser.id !== '' && currentUser.status !== 'En attente' && (
+        {isAppFullyActive && currentUser && currentUser.id !== '' && currentUser.status !== 'En attente' && (
           <div className={`absolute bg-white/95 backdrop-blur-md border-t border-slate-150 py-2.5 px-3 flex justify-around items-center z-40 select-none animate-fade-in ${
             usePhoneFrame 
               ? 'bottom-3 left-3 right-3 rounded-b-[38px]' 

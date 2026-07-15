@@ -18,6 +18,8 @@ export interface UserProfile {
   pinCode?: string;
   email?: string;
   password?: string;
+  licenseKey?: string;
+  isLicensed?: boolean;
 }
 
 export interface Member {
@@ -34,6 +36,8 @@ export interface Member {
   pinCode?: string;
   email?: string;
   password?: string;
+  licenseKey?: string;
+  isLicensed?: boolean;
 }
 
 export interface Participant {
@@ -150,5 +154,14 @@ export interface SystemLog {
   description: string;
   timestamp: string;
   metadata?: Record<string, any>;
+}
+
+export interface License {
+  id: string; // The license code itself
+  status: 'unused' | 'active';
+  activatedBy?: string;
+  activatedByName?: string;
+  activatedAt?: string;
+  tier: SubscriptionTier;
 }
 

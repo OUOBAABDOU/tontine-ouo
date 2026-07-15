@@ -24,6 +24,14 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserRole() == 'Admin' || getUserRole() == 'Super Admin');
     }
 
+    function isLicensedUser() {
+      return isSignedIn() && (
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isLicensed == true)
+      );
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -51,7 +59,9 @@ service cloud.firestore {
         && data.status in ['En attente', 'Validé', 'Rejeté']
         && (!('phone' in data) || data.phone is string)
         && (!('email' in data) || data.email is string)
-        && (!('password' in data) || data.password is string);
+        && (!('password' in data) || data.password is string)
+        && (!('isLicensed' in data) || data.isLicensed is bool)
+        && (!('licenseKey' in data) || data.licenseKey is string);
     }
 
     function isValidUserPrivateInfo(data) {
@@ -152,6 +162,15 @@ service cloud.firestore {
         && data.signature is string;
     }
 
+    function isValidLicense(data) {
+      return data.id is string
+        && data.status in ['unused', 'active']
+        && data.tier in ['Gratuit', 'Premium', 'VIP']
+        && (!('activatedBy' in data) || data.activatedBy is string)
+        && (!('activatedByName' in data) || data.activatedByName is string)
+        && (!('activatedAt' in data) || data.activatedAt is string);
+    }
+
     // 4. Match Blocks
 
     // --- Users Collection ---
@@ -171,7 +190,7 @@ service cloud.firestore {
         incoming().walletBalance == existing().walletBalance &&
         incoming().points == existing().points &&
         incoming().reliabilityScore == existing().reliabilityScore &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'referralCode', 'tier'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'referralCode', 'tier', 'isLicensed', 'licenseKey'])
       )) || isAdmin();
 
       allow delete: if isAdmin();
@@ -201,9 +220,9 @@ service cloud.firestore {
 
     // --- Tontines Collection ---
     match /tontines/{tontineId} {
-      allow read: if isSignedIn();
+      allow read: if isLicensedUser();
       allow create: if isAdmin() && isValidTontine(incoming()) && isValidId(tontineId);
-      allow update: if (isSignedIn() && isValidTontine(incoming()) && (
+      allow update: if (isLicensedUser() && isValidTontine(incoming()) && (
         // Regular players can pay, which updates drawHistory or other non-admin keys, but keep main immutable
         incoming().id == existing().id &&
         incoming().name == existing().name &&
@@ -214,47 +233,47 @@ service cloud.firestore {
 
       // Participants Subcollection
       match /participants/{participantId} {
-        allow read: if isSignedIn();
-        allow create, update: if isSignedIn() && isValidTontineParticipant(incoming());
+        allow read: if isLicensedUser();
+        allow create, update: if isLicensedUser() && isValidTontineParticipant(incoming());
         allow delete: if isAdmin();
       }
     }
 
     // --- Community Posts ---
     match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidPost(incoming()) && incoming().memberId == request.auth.uid && isValidId(postId);
-      allow update: if (isSignedIn() && isValidPost(incoming()) && (
+      allow read: if isLicensedUser();
+      allow create: if isLicensedUser() && isValidPost(incoming()) && incoming().memberId == request.auth.uid && isValidId(postId);
+      allow update: if (isLicensedUser() && isValidPost(incoming()) && (
         // Allow liking and commenting increment
         incoming().id == existing().id &&
         incoming().memberId == existing().memberId &&
         incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'commentsCount'])
-      )) || (isSignedIn() && existing().memberId == request.auth.uid && isValidPost(incoming()) && (
+      )) || (isLicensedUser() && existing().memberId == request.auth.uid && isValidPost(incoming()) && (
         incoming().id == existing().id &&
         incoming().memberId == existing().memberId &&
         incoming().diff(existing()).affectedKeys().hasOnly(['content', 'image'])
       )) || isAdmin();
-      allow delete: if (isSignedIn() && existing().memberId == request.auth.uid) || isAdmin();
+      allow delete: if (isLicensedUser() && existing().memberId == request.auth.uid) || isAdmin();
 
       // Comments Subcollection
       match /comments/{commentId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && isValidComment(incoming()) && isValidId(commentId);
-        allow update, delete: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/posts/$(postId)) && get(/databases/$(database)/documents/posts/$(postId)).data.memberId == request.auth.uid);
+        allow read: if isLicensedUser();
+        allow create: if isLicensedUser() && isValidComment(incoming()) && isValidId(commentId);
+        allow update, delete: if isAdmin() || (isLicensedUser() && exists(/databases/$(database)/documents/posts/$(postId)) && get(/databases/$(database)/documents/posts/$(postId)).data.memberId == request.auth.uid);
       }
     }
 
     // --- Chats & Communication ---
     match /chats/{chatId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidChatThread(incoming()) && isValidId(chatId);
-      allow update: if isSignedIn() && isValidChatThread(incoming());
+      allow read: if isLicensedUser();
+      allow create: if isLicensedUser() && isValidChatThread(incoming()) && isValidId(chatId);
+      allow update: if isLicensedUser() && isValidChatThread(incoming());
       allow delete: if isAdmin();
 
       // Messages Subcollection
       match /messages/{messageId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && isValidMessage(incoming()) && incoming().senderId == request.auth.uid && isValidId(messageId);
+        allow read: if isLicensedUser();
+        allow create: if isLicensedUser() && isValidMessage(incoming()) && incoming().senderId == request.auth.uid && isValidId(messageId);
         allow update, delete: if isAdmin();
       }
     }
@@ -271,6 +290,20 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidDrawCertificate(incoming()) && isValidId(certificateId);
       allow update, delete: if isAdmin();
+    }
+
+    // --- Licenses Collection ---
+    match /licenses/{licenseId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidLicense(incoming()) && isValidId(licenseId);
+      allow update: if isSignedIn() && isValidLicense(incoming()) && (
+        // Allow a user to activate a license key by claiming it if it was unused
+        incoming().status == 'active' &&
+        incoming().activatedBy == request.auth.uid &&
+        existing().status == 'unused' &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'activatedBy', 'activatedByName', 'activatedAt'])
+      ) || isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

@@ -26,7 +26,7 @@ export default function PendingApprovalScreen({ currentUser, onLogout, onSwitchT
         {/* User Card Recap */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center gap-3">
-            <img src={currentUser.avatar} alt="" className="w-11 h-11 rounded-full object-cover border border-slate-100 ring-2 ring-amber-400" />
+            <img src={currentUser.avatar || undefined} alt="" className="w-11 h-11 rounded-full object-cover border border-slate-100 ring-2 ring-amber-400" />
             <div>
               <h3 className="font-extrabold text-sm text-slate-900 leading-tight">{currentUser.name}</h3>
               <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200/40 rounded-full px-2 py-0.5 mt-1 inline-block">

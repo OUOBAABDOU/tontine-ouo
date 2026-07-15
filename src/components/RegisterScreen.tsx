@@ -266,7 +266,7 @@ export default function RegisterScreen({ onRegister, onLogin, members }: Registe
             </label>
             <div className="flex justify-between items-center bg-white p-2 rounded-2xl border border-slate-200">
               <img 
-                src={selectedAvatar} 
+                src={selectedAvatar || undefined} 
                 alt="Selected" 
                 className="w-12 h-12 rounded-full object-cover ring-2 ring-[#0175C2] ring-offset-2 shrink-0" 
               />
@@ -280,7 +280,7 @@ export default function RegisterScreen({ onRegister, onLogin, members }: Registe
                       selectedAvatar === url ? 'border-[#0175C2] scale-110' : 'border-transparent opacity-75'
                     }`}
                   >
-                    <img src={url} alt="" className="w-full h-full object-cover" />
+                    <img src={url || undefined} alt="" className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
@@ -574,7 +574,7 @@ export default function RegisterScreen({ onRegister, onLogin, members }: Registe
                       }}
                       className="w-full bg-white hover:bg-slate-100 text-slate-800 p-2 rounded-xl border border-slate-200 text-left flex items-center gap-2.5 transition-all active:scale-[0.98]"
                     >
-                      <img src={m.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
+                      <img src={m.avatar || undefined} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <span className="font-extrabold text-[11px] truncate max-w-[100px]">{m.name}</span>

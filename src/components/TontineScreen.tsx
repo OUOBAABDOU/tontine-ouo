@@ -611,7 +611,7 @@ export default function TontineScreen({
                         return (
                           <div className="p-3 bg-white/5 border border-white/10 rounded-2xl space-y-2.5">
                             <div className="flex items-center gap-2.5">
-                              <img src={m.avatar} alt="" className="w-9 h-9 rounded-full object-cover border border-white/20 shrink-0" />
+                              <img src={m.avatar || undefined} alt="" className="w-9 h-9 rounded-full object-cover border border-white/20 shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <h4 className="font-extrabold text-[11px] text-white leading-tight truncate">{m.name}</h4>
                                 <div className="flex items-center gap-1 mt-0.5 text-[8px] font-semibold flex-wrap">
@@ -1096,7 +1096,7 @@ export default function TontineScreen({
                           className="flex items-center gap-2"
                         >
                           <img 
-                            src={drawCandidates[activeCandidateIndex]?.avatar} 
+                            src={drawCandidates[activeCandidateIndex]?.avatar || undefined} 
                             alt="" 
                             className="w-7 h-7 rounded-full object-cover border border-[#0175C2]"
                           />
@@ -1120,7 +1120,7 @@ export default function TontineScreen({
                     
                     <div className="flex items-center justify-center gap-3 py-1">
                       <img 
-                        src={winner.avatar} 
+                        src={winner.avatar || undefined} 
                         alt={winner.name} 
                         className="w-12 h-12 rounded-full object-cover ring-2 ring-emerald-500"
                       />
@@ -1179,7 +1179,7 @@ export default function TontineScreen({
                       Nous certifions que le tirage automatisé de la tontine <span className="font-bold">{certificate.tontineName}</span> s'est déroulé de manière totalement équitable ce jour.
                     </p>
                     <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-100">
-                      <img src={certificate.winnerAvatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                      <img src={certificate.winnerAvatar || undefined} alt="" className="w-7 h-7 rounded-full object-cover" />
                       <div>
                         <span className="text-[8px] text-slate-500 block">Gagnante du cycle</span>
                         <span className="text-xs font-bold text-slate-900">{certificate.winnerName}</span>
@@ -1229,7 +1229,7 @@ export default function TontineScreen({
                       >
                         <div className="flex items-center gap-2.5">
                           <img 
-                            src={member.avatar} 
+                            src={member.avatar || undefined} 
                             alt={member.name} 
                             className="w-9 h-9 rounded-full object-cover border border-slate-100"
                           />
@@ -1276,7 +1276,7 @@ export default function TontineScreen({
                         <div key={idx} className="flex justify-between items-center text-[11px] py-1 border-b border-slate-100 last:border-0">
                           <div className="flex items-center gap-1.5 text-slate-700">
                             <span className="text-[9px] font-mono font-bold text-slate-400">#{idx + 1}</span>
-                            <img src={m.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
+                            <img src={m.avatar || undefined} alt="" className="w-4 h-4 rounded-full object-cover" />
                             <span className="font-semibold">{m.name}</span>
                           </div>
                           <span className="text-emerald-600 font-bold">

@@ -9,6 +9,7 @@ import WalletScreen from './components/WalletScreen';
 import RegisterScreen from './components/RegisterScreen';
 import PendingApprovalScreen from './components/PendingApprovalScreen';
 import AppLockScreen from './components/AppLockScreen';
+import LicenseActivationScreen from './components/LicenseActivationScreen';
 
 import { 
   INITIAL_USER, 
@@ -24,7 +25,7 @@ import {
 import { UserProfile, Tontine, Product, Post, ChatThread, Transaction, SubscriptionTier, AppNotification, Member, SystemLog } from './types';
 
 // Real Firestore backend integrations
-import { doc, getDocFromServer } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { 
   db,
   auth,
@@ -45,11 +46,14 @@ import {
   syncTransactions,
   saveTransaction,
   syncNotifications,
-  saveNotification
+  saveNotification,
+  verifyLicenseAtStartup,
+  isOfflineFallbackMode
 } from './lib/firebase';
 
 export default function App() {
   const [currentUser, setCurrentUserLocal] = useState<UserProfile>(INITIAL_USER);
+  const [isLicensed, setIsLicensed] = useState<boolean>(!!localStorage.getItem('assi_tontine_license'));
   const [isAppUnlocked, setIsAppUnlocked] = useState<boolean>(false);
   const [tontines, setTontinesLocal] = useState<Tontine[]>(INITIAL_TONTINES);
   const [members, setMembersLocal] = useState<Member[]>(MOCK_MEMBERS);
@@ -128,14 +132,72 @@ export default function App() {
     const unsubProfile = syncUserProfile(authUid, async (profile) => {
       if (profile) {
         setCurrentUserLocal(profile);
+        if (profile.isLicensed && profile.licenseKey) {
+          const isValid = await verifyLicenseAtStartup(profile.licenseKey, authUid);
+          if (isValid) {
+            setIsLicensed(true);
+            localStorage.setItem('assi_tontine_license', profile.licenseKey);
+          } else {
+            console.warn("La licence n'est plus active ou valide pour cet appareil.");
+            setIsLicensed(false);
+            localStorage.removeItem('assi_tontine_license');
+            
+            // Deactivate in user profile to sync with other sessions
+            const updatedProfile = {
+              ...profile,
+              isLicensed: false,
+              licenseKey: ''
+            };
+            setCurrentUserLocal(updatedProfile);
+            await saveUserProfile(authUid, updatedProfile);
+
+            await addSystemLog(
+              'divers',
+              authUid,
+              profile.name,
+              profile.avatar,
+              `Licence invalide ou révoquée détectée au démarrage : ${profile.licenseKey}`
+            );
+
+            await triggerNotification(
+              'alert',
+              '🔒 Licence Invalidée',
+              `Votre clé de licence '${profile.licenseKey}' a été désactivée ou révoquée par le système.`,
+              'home'
+            );
+          }
+        } else {
+          setIsLicensed(false);
+          localStorage.removeItem('assi_tontine_license');
+        }
       } else {
-        // Initial setup for the user: Maman Marie (Super Admin)
-        const defaultProfile: UserProfile = {
-          ...INITIAL_USER,
-          id: authUid,
-          referralCode: `MARIE-${authUid.substring(0, 4).toUpperCase()}`
-        };
-        await saveUserProfile(authUid, defaultProfile);
+        if (isOfflineFallbackMode) {
+          // Initial setup for the user in local fallback mode
+          const defaultProfile: UserProfile = {
+            ...INITIAL_USER,
+            id: authUid,
+            referralCode: `MARIE-${authUid.substring(0, 4).toUpperCase()}`
+          };
+          setCurrentUserLocal(defaultProfile);
+          await saveUserProfile(authUid, defaultProfile);
+        } else {
+          // In online Firestore mode, new visitors start as empty guests so they must register/login.
+          // This avoids throwing permission denied errors since they aren't authenticated as Admin yet.
+          const guestProfile: UserProfile = {
+            id: authUid,
+            name: '',
+            avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
+            tier: 'Gratuit',
+            reliabilityScore: 50,
+            walletBalance: 0,
+            referralCode: `GUEST-${authUid.substring(0, 4).toUpperCase()}`,
+            points: 0,
+            referralsCount: 0,
+            role: 'Membre',
+            status: undefined
+          };
+          setCurrentUserLocal(guestProfile);
+        }
       }
     });
 
@@ -418,16 +480,68 @@ export default function App() {
 
   // Router for tabs
   const renderScreen = () => {
+    // 0. Check if App is licensed (Required for installation usage)
+    if (!isLicensed) {
+      return (
+        <LicenseActivationScreen 
+          userId={authUid || 'generique_id'}
+          userName={currentUser?.name || 'Invitée'}
+          onActivated={async (license) => {
+            setIsLicensed(true);
+            localStorage.setItem('assi_tontine_license', license.id);
+            localStorage.setItem('assi_tontine_tier', license.tier);
+            if (currentUser && authUid) {
+              const updated = {
+                ...currentUser,
+                isLicensed: true,
+                licenseKey: license.id,
+                tier: license.tier
+              };
+              setCurrentUserLocal(updated);
+              
+              // Only update Firestore profile if they already have an existing profile
+              const userRef = doc(db, 'users', authUid);
+              const userSnap = await getDoc(userRef);
+              if (userSnap.exists()) {
+                await saveUserProfile(authUid, updated);
+              }
+            }
+            await addSystemLog(
+              'divers',
+              authUid || 'system',
+              currentUser?.name || 'Invitée',
+              currentUser?.avatar || '',
+              `Activation de l'application réussie avec la licence : ${license.id} (Abonnement : ${license.tier})`
+            );
+            await triggerNotification(
+              'alert',
+              '🔑 Licence Activée',
+              `Félicitations ! Votre licence '${license.id}' (${license.tier}) a été validée avec succès sur cet appareil.`,
+              'home'
+            );
+          }}
+          onBypassDemo={() => {
+            setIsLicensed(true);
+          }}
+        />
+      );
+    }
+
     // 1. Check if logged out
     if (!currentUser || currentUser.name === '') {
       return (
         <RegisterScreen 
           onRegister={async (newProfile) => {
             if (!authUid) return;
+            const licenseKey = localStorage.getItem('assi_tontine_license');
+            const licenseTier = (localStorage.getItem('assi_tontine_tier') as SubscriptionTier) || 'Gratuit';
             const userProf: UserProfile = {
               ...newProfile,
               id: authUid,
-              status: 'En attente'
+              status: 'En attente',
+              isLicensed: !!licenseKey,
+              licenseKey: licenseKey || '',
+              tier: licenseKey ? licenseTier : newProfile.tier
             };
             
             await saveUserProfile(authUid, userProf);
@@ -450,10 +564,15 @@ export default function App() {
           }}
           onLogin={async (userId, customProfile) => {
             if (!authUid) return;
+            const licenseKey = localStorage.getItem('assi_tontine_license');
+            const licenseTier = (localStorage.getItem('assi_tontine_tier') as SubscriptionTier) || 'Gratuit';
             if (customProfile) {
               const userProf: UserProfile = {
                 ...customProfile,
-                id: authUid
+                id: authUid,
+                isLicensed: !!licenseKey,
+                licenseKey: licenseKey || '',
+                tier: licenseKey ? licenseTier : customProfile.tier
               };
               await saveUserProfile(authUid, userProf);
               setIsAppUnlocked(true);
@@ -470,6 +589,9 @@ export default function App() {
               const defaultProfile: UserProfile = {
                 ...INITIAL_USER,
                 id: authUid,
+                isLicensed: !!licenseKey,
+                licenseKey: licenseKey || '',
+                tier: licenseKey ? licenseTier : 'Gratuit',
                 referralCode: `MARIE-${authUid.substring(0, 4).toUpperCase()}`
               };
               await saveUserProfile(authUid, defaultProfile);
@@ -481,7 +603,9 @@ export default function App() {
                   id: authUid,
                   name: matchedMember.name,
                   avatar: matchedMember.avatar,
-                  tier: matchedMember.tier,
+                  tier: licenseKey ? licenseTier : matchedMember.tier,
+                  isLicensed: !!licenseKey,
+                  licenseKey: licenseKey || '',
                   reliabilityScore: matchedMember.reliabilityScore,
                   walletBalance: matchedMember.id === 'm2' ? 120000 : 15000,
                   referralCode: `${matchedMember.name.split(' ')[0].toUpperCase()}-XYZ`,
@@ -633,6 +757,8 @@ export default function App() {
     }
   };
 
+  const isAppFullyActive = isLicensed && isAppUnlocked && currentUser && currentUser.name !== '' && currentUser.status !== 'En attente';
+
   return (
     <PhoneFrame
       activeTab={activeTab === 'boutique' ? 'home' : activeTab} // Keep home icon active when inside boutique
@@ -645,6 +771,7 @@ export default function App() {
       setNotifications={setNotifications}
       activeToast={activeToast}
       setActiveToast={setActiveToast}
+      isAppFullyActive={isAppFullyActive}
     >
       {renderScreen()}
     </PhoneFrame>

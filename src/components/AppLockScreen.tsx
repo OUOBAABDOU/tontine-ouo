@@ -155,7 +155,7 @@ export default function AppLockScreen({ currentUser, onUnlock, onLogout }: AppLo
               <p className="text-[11px] text-slate-400 font-medium">Heureux de vous revoir,</p>
               <div className="flex items-center justify-center gap-1.5 bg-slate-800/50 py-1 px-2.5 rounded-full max-w-[180px] mx-auto border border-slate-700/40">
                 <img 
-                  src={currentUser.avatar} 
+                  src={currentUser.avatar || undefined} 
                   alt="" 
                   className="w-4 h-4 rounded-full object-cover ring-1 ring-[#0175C2]" 
                 />

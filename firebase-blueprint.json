@@ -177,6 +177,20 @@
         "signature": { "type": "string" }
       },
       "required": ["id", "tontineId", "tontineName", "winnerName", "winnerAvatar", "amount", "date", "signature"]
+    },
+    "License": {
+      "title": "License",
+      "description": "Software license activation keys",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["unused", "active"] },
+        "activatedBy": { "type": "string" },
+        "activatedByName": { "type": "string" },
+        "activatedAt": { "type": "string" },
+        "tier": { "type": "string", "enum": ["Gratuit", "Premium", "VIP"] }
+      },
+      "required": ["id", "status", "tier"]
     }
   },
   "firestore": {
@@ -227,6 +241,10 @@
     "/drawCertificates/{certificateId}": {
       "schema": "DrawCertificate",
       "description": "Legitimate rotating lottery certifications"
+    },
+    "/licenses/{licenseId}": {
+      "schema": "License",
+      "description": "Software license validation records"
     }
   }
 }

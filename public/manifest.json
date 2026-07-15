@@ -1,0 +1,25 @@
+{
+  "short_name": "AssiTontine",
+  "name": "Assi Tontine & Market Pro",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=192&auto=format&fit=crop",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=512&auto=format&fit=crop",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#02569B",
+  "theme_color": "#0175C2",
+  "display": "standalone",
+  "orientation": "portrait",
+  "categories": ["finance", "social"],
+  "description": "Plateforme solidaire de tontines intelligentes et de commerce communautaire."
+}

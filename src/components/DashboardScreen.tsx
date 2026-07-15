@@ -24,9 +24,12 @@ import {
   Shield,
   HelpCircle,
   Clock,
-  Briefcase
+  Briefcase,
+  Copy,
+  Trash2
 } from 'lucide-react';
-import { UserProfile, Tontine, Member, SubscriptionTier, UserRole } from '../types';
+import { UserProfile, Tontine, Member, SubscriptionTier, UserRole, License } from '../types';
+import { syncLicenses, createNewLicense, deleteLicense, revokeLicense } from '../lib/firebase';
 
 interface SystemLog {
   id: string;
@@ -82,16 +85,72 @@ export default function DashboardScreen({
 }: DashboardScreenProps) {
   
   // Tab within Dashboard for Admin view
-  const [adminSection, setAdminSection] = useState<'pending' | 'logs' | 'members'>('pending');
+  const [adminSection, setAdminSection] = useState<'pending' | 'logs' | 'members' | 'licenses'>('pending');
   const [logFilter, setLogFilter] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
   
+  // Licenses state & generation form
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [newLicenseKey, setNewLicenseKey] = useState('');
+  const [newLicenseTier, setNewLicenseTier] = useState<SubscriptionTier>('Premium');
+  const [licenseGenSuccess, setLicenseGenSuccess] = useState(false);
+  const [licenseGenError, setLicenseGenError] = useState<string | null>(null);
+
   // Role upgrade state
   const [requestedUpgrade, setRequestedUpgrade] = useState<UserRole>('Admin');
   const [upgradeMotivation, setUpgradeMotivation] = useState('');
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
 
   const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'Super Admin';
+
+  // Subscribe to licenses updates
+  React.useEffect(() => {
+    if (isAdmin) {
+      const unsub = syncLicenses((list) => {
+        setLicenses(list);
+      });
+      return () => unsub();
+    }
+  }, [isAdmin]);
+
+  // Generate random license helper
+  const handleRandomizeKey = () => {
+    const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const randomHex2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    setNewLicenseKey(`LICENCE-${randomHex}-${randomHex2}`);
+    setLicenseGenError(null);
+  };
+
+  const handleGenerateLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLicenseKey.trim()) return;
+
+    setLicenseGenError(null);
+    setLicenseGenSuccess(false);
+
+    try {
+      const formattedKey = newLicenseKey.trim().toUpperCase();
+      await createNewLicense({
+        id: formattedKey,
+        status: 'unused',
+        tier: newLicenseTier
+      });
+      setLicenseGenSuccess(true);
+      setNewLicenseKey('');
+      if (addSystemLog) {
+        addSystemLog(
+          'divers',
+          currentUser.id,
+          currentUser.name,
+          currentUser.avatar,
+          `Nouvelle clé de licence créée : ${formattedKey} (Abonnement : ${newLicenseTier})`
+        );
+      }
+      setTimeout(() => setLicenseGenSuccess(false), 3000);
+    } catch (err: any) {
+      setLicenseGenError(err instanceof Error ? err.message : "Erreur de génération.");
+    }
+  };
 
   // Stats
   const pendingMembers = members.filter(m => m.status === 'En attente');
@@ -311,10 +370,10 @@ export default function DashboardScreen({
           </div>
 
           {/* Admin Navigation tabs */}
-          <div className="flex gap-1.5 p-0.5 bg-slate-800 rounded-xl text-[10px] font-bold">
+          <div className="flex gap-1 p-0.5 bg-slate-800 rounded-xl text-[9px] font-bold">
             <button
               onClick={() => setAdminSection('pending')}
-              className={`flex-1 py-1.5 rounded-lg text-center ${
+              className={`flex-1 py-1.5 rounded-lg text-center whitespace-nowrap px-1 ${
                 adminSection === 'pending' ? 'bg-[#0175C2] text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -322,19 +381,27 @@ export default function DashboardScreen({
             </button>
             <button
               onClick={() => setAdminSection('logs')}
-              className={`flex-1 py-1.5 rounded-lg text-center ${
+              className={`flex-1 py-1.5 rounded-lg text-center whitespace-nowrap px-1 ${
                 adminSection === 'logs' ? 'bg-[#0175C2] text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
-              📑 Audit Système
+              📑 Audit
             </button>
             <button
               onClick={() => setAdminSection('members')}
-              className={`flex-1 py-1.5 rounded-lg text-center ${
+              className={`flex-1 py-1.5 rounded-lg text-center whitespace-nowrap px-1 ${
                 adminSection === 'members' ? 'bg-[#0175C2] text-white' : 'text-slate-400 hover:text-white'
               }`}
             >
-              👥 Tous les Comptes
+              👥 Membres
+            </button>
+            <button
+              onClick={() => setAdminSection('licenses')}
+              className={`flex-1 py-1.5 rounded-lg text-center whitespace-nowrap px-1 ${
+                adminSection === 'licenses' ? 'bg-[#0175C2] text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🔑 Licences ({licenses.length})
             </button>
           </div>
 
@@ -350,7 +417,7 @@ export default function DashboardScreen({
                   {pendingMembers.map(m => (
                     <div key={m.id} className="p-2.5 bg-slate-800 rounded-2xl border border-slate-700/60 flex items-center justify-between text-xs gap-2">
                       <div className="flex items-center gap-2">
-                        <img src={m.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-700" />
+                        <img src={m.avatar || undefined} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-700" />
                         <div>
                           <p className="font-extrabold text-[11px] text-white">{m.name}</p>
                           <p className="text-[8px] text-slate-400 leading-none">Tel : {m.phone || 'N/A'}</p>
@@ -405,7 +472,7 @@ export default function DashboardScreen({
                     const isSystem = log.type === 'validation_compte' || log.type === 'creation_tontine';
                     return (
                       <div key={log.id} className="p-2 bg-slate-800/80 rounded-xl border border-slate-700/40 flex items-start gap-2">
-                        <img src={log.userAvatar} alt="" className="w-6 h-6 rounded-full object-cover border border-slate-700 mt-0.5 shrink-0" />
+                        <img src={log.userAvatar || undefined} alt="" className="w-6 h-6 rounded-full object-cover border border-slate-700 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="text-[9px] text-slate-300 font-semibold leading-normal">
                             <strong className="text-white">{log.userName}</strong> • {log.description}
@@ -439,7 +506,7 @@ export default function DashboardScreen({
                 return (
                   <div key={m.id} className="p-2 bg-slate-800 rounded-xl border border-slate-700/40 flex items-center justify-between text-xs gap-2">
                     <div className="flex items-center gap-2">
-                      <img src={m.avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0" />
+                      <img src={m.avatar || undefined} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0" />
                       <div className="min-w-0">
                         <p className="font-extrabold text-[11px] text-white truncate max-w-[120px]">{m.name}</p>
                         <p className="text-[8px] text-slate-400 leading-none">PIN: {m.pinCode || '1234'} • {m.phone || 'Pas de numéro'}</p>
@@ -456,6 +523,150 @@ export default function DashboardScreen({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Admin sub-section: LICENSES MANAGEMENT */}
+          {adminSection === 'licenses' && (
+            <div className="space-y-3">
+              {/* Generation Form */}
+              <form onSubmit={handleGenerateLicense} className="p-3 bg-slate-800/60 rounded-2xl border border-slate-700/40 space-y-2">
+                <p className="text-[9px] font-black uppercase text-amber-400 tracking-wider">Créer une Clé de Licence</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[7px] font-bold text-slate-400 uppercase mb-0.5">Clé / Code</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        required
+                        placeholder="LICENCE-ABCD"
+                        value={newLicenseKey}
+                        onChange={(e) => setNewLicenseKey(e.target.value.toUpperCase())}
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-[10px] text-white font-mono focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRandomizeKey}
+                        className="px-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-[9px] font-bold text-slate-200 transition-colors"
+                        title="Générer aléatoirement"
+                      >
+                        Auto
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[7px] font-bold text-slate-400 uppercase mb-0.5">Niveau</label>
+                    <select
+                      value={newLicenseTier}
+                      onChange={(e) => setNewLicenseTier(e.target.value as SubscriptionTier)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-[10px] text-white focus:outline-none font-bold"
+                    >
+                      <option value="Gratuit">Gratuit ⭐</option>
+                      <option value="Premium">Premium 🔥</option>
+                      <option value="VIP">VIP 👑</option>
+                    </select>
+                  </div>
+                </div>
+
+                {licenseGenError && (
+                  <p className="text-[8px] text-rose-400 font-bold leading-tight">{licenseGenError}</p>
+                )}
+                {licenseGenSuccess && (
+                  <p className="text-[8px] text-emerald-400 font-bold leading-tight">Clé générée et enregistrée avec succès ! ✓</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={!newLicenseKey.trim()}
+                  className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-slate-700 disabled:text-slate-500 text-slate-950 font-black text-[9px] py-1.5 rounded-lg uppercase transition-colors"
+                >
+                  Enregistrer dans Firestore
+                </button>
+              </form>
+
+              {/* List of Licences */}
+              <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                {licenses.length === 0 ? (
+                  <div className="p-3 text-center bg-slate-800/40 rounded-xl text-slate-400 text-[9px]">
+                    Aucune clé de licence configurée dans Firestore.
+                  </div>
+                ) : (
+                  licenses.map(lic => {
+                    const isActive = lic.status === 'active';
+                    return (
+                      <div key={lic.id} className="p-2 bg-slate-800/80 rounded-xl border border-slate-700/40 flex items-center justify-between gap-2 text-[10px]">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-white tracking-wide">{lic.id}</span>
+                            <span className={`px-1 py-0.2 rounded text-[7px] font-bold ${
+                              lic.tier === 'VIP' ? 'bg-amber-400/20 text-amber-300' : lic.tier === 'Premium' ? 'bg-purple-400/20 text-purple-300' : 'bg-slate-700 text-slate-300'
+                            }`}>
+                              {lic.tier}
+                            </span>
+                          </div>
+                          {isActive ? (
+                            <p className="text-[7.5px] text-slate-400 mt-0.5 leading-tight truncate">
+                              Activé par : <strong className="text-slate-300">{lic.activatedByName || 'Inconnu'}</strong> ({lic.activatedAt?.split('T')[0]})
+                            </p>
+                          ) : (
+                            <p className="text-[7.5px] text-emerald-400 mt-0.5 leading-tight font-semibold">
+                              ✓ Prêt pour activation
+                            </p>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(lic.id);
+                            }}
+                            className="p-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 transition-colors"
+                            title="Copier la clé"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          {isActive && (
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Êtes-vous sûr de vouloir révoquer la licence ${lic.id} ? L'accès de l'utilisateur concerné sera immédiatement désactivé.`)) {
+                                  try {
+                                    await revokeLicense(lic.id);
+                                  } catch (err: any) {
+                                    alert("Erreur lors de la révocation : " + err.message);
+                                  }
+                                }
+                              }}
+                              className="p-1 bg-amber-500/20 hover:bg-amber-500/40 rounded text-amber-300 transition-colors"
+                              title="Révoquer la licence pour cet appareil"
+                            >
+                              <UserX className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Êtes-vous sûr de vouloir supprimer définitivement la licence ${lic.id} de la base de données ?`)) {
+                                try {
+                                  await deleteLicense(lic.id);
+                                } catch (err: any) {
+                                  alert("Erreur lors de la suppression : " + err.message);
+                                }
+                              }
+                            }}
+                            className="p-1 bg-rose-500/10 hover:bg-rose-500/20 rounded text-rose-400 transition-colors"
+                            title="Supprimer la licence"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                          <span className={`px-1 py-0.5 rounded text-[7px] font-black uppercase ${
+                            isActive ? 'bg-slate-700 text-slate-400' : 'bg-emerald-500/20 text-emerald-400 animate-pulse'
+                          }`}>
+                            {isActive ? 'Utilisé' : 'Libre'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -609,7 +820,7 @@ export default function DashboardScreen({
           <div className="flex flex-wrap gap-1.5">
             {referredMoms.map(m => (
               <div key={m.id} className="flex items-center gap-1 bg-white p-1 rounded-full border border-slate-200/60 shadow-sm pr-2 text-[9px] font-semibold text-slate-700">
-                <img src={m.avatar} alt="" className="w-5 h-5 rounded-full object-cover" />
+                <img src={m.avatar || undefined} alt="" className="w-5 h-5 rounded-full object-cover" />
                 <span>{m.name.split(' ')[0]}</span>
                 {m.status === 'Validé' ? (
                   <span className="text-emerald-500 text-[8px]">✓</span>

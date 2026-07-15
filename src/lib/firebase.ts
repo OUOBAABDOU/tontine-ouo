@@ -4,6 +4,7 @@ import {
   getFirestore, 
   doc, 
   getDocFromServer,
+  getDoc,
   collection,
   setDoc,
   getDocs,
@@ -117,7 +118,8 @@ import {
   Transaction, 
   AppNotification, 
   SystemLog,
-  Member
+  Member,
+  License
 } from '../types';
 
 // -------------------------------------------------------------
@@ -291,6 +293,11 @@ export async function seedFirestore(
       })));
       
       saveLocalCollection('systemLogs', initialSystemLogs);
+      saveLocalCollection('licenses', [
+        { id: 'LICENCE-FREE-2026', status: 'unused', tier: 'Gratuit' },
+        { id: 'LICENCE-PREMIUM-2026', status: 'unused', tier: 'Premium' },
+        { id: 'LICENCE-VIP-2026', status: 'unused', tier: 'VIP' }
+      ]);
       console.log("Local storage fallback database successfully seeded.");
     }
     return;
@@ -382,6 +389,16 @@ export async function seedFirestore(
           description: l.description,
           timestamp: l.timestamp
         });
+      }
+
+      // Seed licenses
+      const defaultLicenses: License[] = [
+        { id: 'LICENCE-FREE-2026', status: 'unused', tier: 'Gratuit' },
+        { id: 'LICENCE-PREMIUM-2026', status: 'unused', tier: 'Premium' },
+        { id: 'LICENCE-VIP-2026', status: 'unused', tier: 'VIP' }
+      ];
+      for (const lic of defaultLicenses) {
+        await setDoc(doc(db, 'licenses', lic.id), lic);
       }
 
       console.log("Firestore successfully seeded with initial data.");
@@ -834,3 +851,296 @@ export async function updateNotificationRead(userId: string, notifId: string, is
     handleFirestoreError(error, OperationType.UPDATE, `${colPath}/${notifId}`);
   }
 }
+
+// Syncing Licenses for Admin Dashboard
+export function syncLicenses(callback: (licenses: License[]) => void) {
+  if (isOfflineFallbackMode) {
+    const list = getLocalCollection<License>('licenses');
+    callback(list);
+    return () => {};
+  }
+
+  return onSnapshot(collection(db, 'licenses'), (snapshot) => {
+    const list: License[] = [];
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      list.push({
+        id: docSnap.id,
+        status: data.status || 'unused',
+        activatedBy: data.activatedBy || '',
+        activatedByName: data.activatedByName || '',
+        activatedAt: data.activatedAt || '',
+        tier: data.tier || 'Gratuit'
+      });
+    });
+    callback(list);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.GET, 'licenses');
+  });
+}
+
+// Check and Activate a License Key
+export async function checkAndActivateLicense(
+  licenseKey: string,
+  userId: string,
+  userName: string
+): Promise<License> {
+  const cleanKey = licenseKey.trim().toUpperCase();
+
+  if (isOfflineFallbackMode) {
+    const licenses = getLocalCollection<License>('licenses');
+    let index = licenses.findIndex(l => l.id === cleanKey);
+    
+    if (index === -1) {
+      // If it is a valid pre-generated demo key but missing in local storage, auto-inject it
+      const defaultTiers: { [key: string]: 'Gratuit' | 'Premium' | 'VIP' } = {
+        'LICENCE-FREE-2026': 'Gratuit',
+        'LICENCE-PREMIUM-2026': 'Premium',
+        'LICENCE-VIP-2026': 'VIP'
+      };
+      if (defaultTiers[cleanKey]) {
+        const newLic: License = {
+          id: cleanKey,
+          status: 'unused',
+          tier: defaultTiers[cleanKey]
+        };
+        licenses.push(newLic);
+        saveLocalCollection('licenses', licenses);
+        index = licenses.length - 1;
+      } else {
+        throw new Error("Clé de licence invalide. Essayez les clés de démo fournies.");
+      }
+    }
+    
+    const license = licenses[index];
+    if (license.status === 'active' && license.activatedBy !== userId) {
+      throw new Error(`Cette licence a déjà été activée par un autre utilisateur (${license.activatedByName || 'Inconnu'}).`);
+    }
+
+    // Update license local state
+    const updatedLic: License = {
+      ...license,
+      status: 'active',
+      activatedBy: userId,
+      activatedByName: userName || 'Utilisateur',
+      activatedAt: new Date().toISOString()
+    };
+    licenses[index] = updatedLic;
+    saveLocalCollection('licenses', licenses);
+
+    // Update user profile local state
+    const users = getLocalCollection<any>('users');
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex >= 0) {
+      users[userIndex].isLicensed = true;
+      users[userIndex].licenseKey = cleanKey;
+      users[userIndex].tier = license.tier;
+      saveLocalCollection('users', users);
+      triggerProfileListeners(userId);
+      triggerMembersListeners();
+    }
+
+    return updatedLic;
+  }
+
+  try {
+    const licenseRef = doc(db, 'licenses', cleanKey);
+    let licenseSnap = await getDoc(licenseRef);
+
+    if (!licenseSnap.exists()) {
+      // Auto-create/seed the demo key on demand in online mode if it does not exist
+      const defaultTiers: { [key: string]: 'Gratuit' | 'Premium' | 'VIP' } = {
+        'LICENCE-FREE-2026': 'Gratuit',
+        'LICENCE-PREMIUM-2026': 'Premium',
+        'LICENCE-VIP-2026': 'VIP'
+      };
+      if (defaultTiers[cleanKey]) {
+        const newLic: License = {
+          id: cleanKey,
+          status: 'unused',
+          tier: defaultTiers[cleanKey]
+        };
+        await setDoc(licenseRef, newLic);
+        licenseSnap = await getDoc(licenseRef);
+      } else {
+        throw new Error("Clé de licence inexistante dans notre base de données en ligne.");
+      }
+    }
+
+    const licenseData = licenseSnap.data() as License;
+    if (licenseData.status === 'active' && licenseData.activatedBy !== userId) {
+      throw new Error(`Cette clé a déjà été activée par un autre membre (${licenseData.activatedByName || 'Inconnu'}).`);
+    }
+
+    const activatedLicense: License = {
+      id: cleanKey,
+      status: 'active',
+      activatedBy: userId,
+      activatedByName: userName || 'Utilisateur',
+      activatedAt: new Date().toISOString(),
+      tier: licenseData.tier
+    };
+
+    // 1. Mark license as active
+    await setDoc(licenseRef, activatedLicense);
+
+    // 2. Update user profile to reflect licensure and tier in Firestore (only if user document exists)
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      await updateDoc(userRef, {
+        isLicensed: true,
+        licenseKey: cleanKey,
+        tier: licenseData.tier
+      });
+    }
+
+    return activatedLicense;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Clé")) {
+      throw error;
+    }
+    throw new Error("Erreur lors de la validation en ligne : " + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
+// Create a new license (Admin only)
+export async function createNewLicense(lic: License) {
+  if (isOfflineFallbackMode) {
+    const list = getLocalCollection<License>('licenses');
+    if (list.some(l => l.id === lic.id)) {
+      throw new Error("Cette clé de licence existe déjà.");
+    }
+    list.push(lic);
+    saveLocalCollection('licenses', list);
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'licenses', lic.id);
+    await setDoc(docRef, lic);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `licenses/${lic.id}`);
+  }
+}
+
+// Verify license status at startup for a specific user device
+export async function verifyLicenseAtStartup(licenseKey: string, userId: string): Promise<boolean> {
+  const cleanKey = licenseKey.trim().toUpperCase();
+  if (isOfflineFallbackMode) {
+    const licenses = getLocalCollection<License>('licenses');
+    let license = licenses.find(l => l.id === cleanKey);
+    if (!license) {
+      // If the user's profile already contains this key, auto-restore the license record
+      const defaultTiers: { [key: string]: 'Gratuit' | 'Premium' | 'VIP' } = {
+        'LICENCE-FREE-2026': 'Gratuit',
+        'LICENCE-PREMIUM-2026': 'Premium',
+        'LICENCE-VIP-2026': 'VIP'
+      };
+      if (defaultTiers[cleanKey]) {
+        license = {
+          id: cleanKey,
+          status: 'active',
+          activatedBy: userId,
+          activatedByName: 'Utilisateur',
+          activatedAt: new Date().toISOString(),
+          tier: defaultTiers[cleanKey]
+        };
+        licenses.push(license);
+        saveLocalCollection('licenses', licenses);
+      } else {
+        return false;
+      }
+    }
+    return license.status === 'active' && license.activatedBy === userId;
+  }
+
+  try {
+    const licenseRef = doc(db, 'licenses', cleanKey);
+    const licenseSnap = await getDoc(licenseRef);
+    if (!licenseSnap.exists()) return false;
+    const data = licenseSnap.data();
+    return data.status === 'active' && data.activatedBy === userId;
+  } catch (error) {
+    console.error("Error verifying license at startup:", error);
+    return false;
+  }
+}
+
+// Delete a license completely (Admin only)
+export async function deleteLicense(licenseId: string) {
+  if (isOfflineFallbackMode) {
+    const list = getLocalCollection<License>('licenses');
+    const index = list.findIndex(l => l.id === licenseId);
+    if (index >= 0) {
+      list.splice(index, 1);
+      saveLocalCollection('licenses', list);
+    }
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'licenses', licenseId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `licenses/${licenseId}`);
+  }
+}
+
+// Revoke an active license to make it unused again or deactivate it (Admin only)
+export async function revokeLicense(licenseId: string) {
+  if (isOfflineFallbackMode) {
+    const list = getLocalCollection<License>('licenses');
+    const index = list.findIndex(l => l.id === licenseId);
+    if (index >= 0) {
+      const lic = list[index];
+      
+      // If there's an associated user, deactivate them too in local state
+      if (lic.activatedBy) {
+        const users = getLocalCollection<any>('users');
+        const userIndex = users.findIndex(u => u.id === lic.activatedBy);
+        if (userIndex >= 0) {
+          users[userIndex].isLicensed = false;
+          users[userIndex].licenseKey = '';
+          saveLocalCollection('users', users);
+          triggerProfileListeners(lic.activatedBy);
+        }
+      }
+
+      list[index] = {
+        id: lic.id,
+        status: 'unused',
+        tier: lic.tier
+      };
+      saveLocalCollection('licenses', list);
+    }
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'licenses', licenseId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data() as License;
+      
+      // Deactivate user document first if it was activated
+      if (data.activatedBy) {
+        const userRef = doc(db, 'users', data.activatedBy);
+        await updateDoc(userRef, {
+          isLicensed: false,
+          licenseKey: ''
+        });
+      }
+
+      // Mark license as unused
+      await setDoc(docRef, {
+        id: licenseId,
+        status: 'unused',
+        tier: data.tier
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `licenses/${licenseId}`);
+  }
+}
+

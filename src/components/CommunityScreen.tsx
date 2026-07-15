@@ -187,7 +187,7 @@ export default function CommunityScreen({
                   onClick={() => setIsCreatingPost(true)}
                   className="flex items-center gap-3 cursor-pointer"
                 >
-                  <img src={currentUser.avatar} alt="" className="w-7.5 h-7.5 rounded-full object-cover border border-slate-100" />
+                  <img src={currentUser.avatar || undefined} alt="" className="w-7.5 h-7.5 rounded-full object-cover border border-slate-100" />
                   <div className="flex-1 bg-slate-50 border border-slate-100 text-xs text-slate-500 p-2.5 rounded-xl font-medium">
                     Partagez un achat, un témoignage ou un succès...
                   </div>
@@ -239,7 +239,7 @@ export default function CommunityScreen({
                   {/* Header */}
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2.5">
-                      <img src={p.memberAvatar} alt={p.memberName} className="w-8.5 h-8.5 rounded-full object-cover border border-slate-100" />
+                      <img src={p.memberAvatar || undefined} alt={p.memberName} className="w-8.5 h-8.5 rounded-full object-cover border border-slate-100" />
                       <div>
                         <div className="flex items-center gap-1.5">
                           <h4 className="text-xs font-bold text-slate-900 leading-tight">{p.memberName}</h4>
@@ -371,7 +371,7 @@ export default function CommunityScreen({
                   className="p-3.5 bg-white border border-slate-100 rounded-3xl flex items-center justify-between shadow-sm hover:border-slate-200 transition-all"
                 >
                   <div className="flex items-center gap-2.5">
-                    <img src={m.avatar} alt={m.name} className="w-9 h-9 rounded-full object-cover border border-slate-100" />
+                    <img src={m.avatar || undefined} alt={m.name} className="w-9 h-9 rounded-full object-cover border border-slate-100" />
                     <div>
                       <h4 className="text-xs font-bold text-slate-900">{m.name}</h4>
                       <div className="flex items-center gap-1.5 mt-0.5">

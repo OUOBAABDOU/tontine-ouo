@@ -223,7 +223,7 @@ export default function ChatScreen({
                         {c.avatar}
                       </div>
                     ) : (
-                      <img src={c.avatar} alt={c.name} className="w-10 h-10 rounded-full object-cover border border-slate-100" />
+                      <img src={c.avatar || undefined} alt={c.name} className="w-10 h-10 rounded-full object-cover border border-slate-100" />
                     )}
 
                     {/* Online indicator */}
@@ -288,7 +288,7 @@ export default function ChatScreen({
                     {selectedChat.avatar}
                   </div>
                 ) : (
-                  <img src={selectedChat?.avatar} alt="" className="w-8.5 h-8.5 rounded-full object-cover border border-slate-100" />
+                  <img src={selectedChat?.avatar || undefined} alt="" className="w-8.5 h-8.5 rounded-full object-cover border border-slate-100" />
                 )}
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 leading-tight">{selectedChat?.name}</h4>
@@ -334,7 +334,7 @@ export default function ChatScreen({
                   className={`flex gap-2.5 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
                 >
                   {!isCurrentUser && (
-                    <img src={m.senderAvatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1 border border-slate-100" />
+                    <img src={m.senderAvatar || undefined} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1 border border-slate-100" />
                   )}
 
                   <div className="space-y-0.5 max-w-[75%]">
@@ -375,7 +375,7 @@ export default function ChatScreen({
             {/* Typing indicator bubble */}
             {selectedChat?.isTyping && (
               <div className="flex gap-2.5 justify-start">
-                <img src={selectedChat.isGroup ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200' : selectedChat.avatar} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1" />
+                <img src={selectedChat.isGroup ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200' : (selectedChat.avatar || undefined)} alt="" className="w-7 h-7 rounded-full object-cover shrink-0 mt-1" />
                 <div className="bg-slate-50 text-slate-400 p-2.5 rounded-2xl rounded-tl-none flex items-center gap-1 border border-slate-100 shadow-sm">
                   <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
                   <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
