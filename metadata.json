@@ -1,0 +1,6 @@
+{
+  "name": "Tontine & Market Pro",
+  "description": "Une plateforme tout-en-un pour gérer les tontines d'argent et alimentaires, acheter des kits, et échanger dans un réseau social sécurisé de mamans fiables.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,232 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public profile details of a member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "avatar": { "type": "string" },
+        "tier": { "type": "string", "enum": ["Gratuit", "Premium", "VIP", "Vendeuse"] },
+        "reliabilityScore": { "type": "integer" },
+        "walletBalance": { "type": "integer" },
+        "referralCode": { "type": "string" },
+        "points": { "type": "integer" },
+        "referralsCount": { "type": "integer" },
+        "role": { "type": "string", "enum": ["Membre", "Admin", "Super Admin"] },
+        "status": { "type": "string", "enum": ["En attente", "Validé", "Rejeté"] }
+      },
+      "required": ["id", "name", "avatar", "tier", "reliabilityScore", "walletBalance", "referralCode", "points", "referralsCount", "role", "status"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Private sensitive details of a member",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string", "maxLength": 20 }
+      },
+      "required": ["phone"]
+    },
+    "Tontine": {
+      "title": "Tontine",
+      "description": "A rotating savings and credit association group",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "enum": ["Argent", "Alimentaire"] },
+        "contributionAmount": { "type": "integer" },
+        "frequency": { "type": "string", "enum": ["Mensuelle", "Hebdomadaire"] },
+        "totalPlaces": { "type": "integer" },
+        "status": { "type": "string", "enum": ["Recrutement", "En Cours", "Terminée"] },
+        "description": { "type": "string", "maxLength": 1000 },
+        "nextDrawDate": { "type": "string" },
+        "drawHistory": { "type": "array" }
+      },
+      "required": ["id", "name", "type", "contributionAmount", "frequency", "totalPlaces", "status", "description", "nextDrawDate", "drawHistory"]
+    },
+    "TontineParticipant": {
+      "title": "TontineParticipant",
+      "description": "Participant record within a tontine",
+      "type": "object",
+      "properties": {
+        "memberId": { "type": "string" },
+        "hasPaidThisRound": { "type": "boolean" },
+        "orderNumber": { "type": "integer" }
+      },
+      "required": ["memberId", "hasPaidThisRound"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Social community feed post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "memberId": { "type": "string" },
+        "memberName": { "type": "string", "maxLength": 100 },
+        "memberAvatar": { "type": "string" },
+        "memberTier": { "type": "string", "enum": ["Gratuit", "Premium", "VIP", "Vendeuse"] },
+        "content": { "type": "string", "maxLength": 2000 },
+        "image": { "type": "string" },
+        "likes": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "timestamp": { "type": "string" },
+        "isPinned": { "type": "boolean" }
+      },
+      "required": ["id", "memberId", "memberName", "memberAvatar", "memberTier", "content", "likes", "commentsCount", "timestamp"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Comment on a social community feed post",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "memberName": { "type": "string", "maxLength": 100 },
+        "content": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "memberName", "content", "timestamp"]
+    },
+    "ChatThread": {
+      "title": "ChatThread",
+      "description": "A chat thread discussion",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "avatar": { "type": "string" },
+        "isGroup": { "type": "boolean" },
+        "tontineId": { "type": "string" },
+        "lastMessage": { "type": "string", "maxLength": 500 },
+        "lastMessageTime": { "type": "string" },
+        "unreadCount": { "type": "integer" }
+      },
+      "required": ["id", "name", "avatar", "isGroup", "lastMessage", "lastMessageTime", "unreadCount"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in a chat thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderAvatar": { "type": "string" },
+        "content": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string" },
+        "isSecret": { "type": "boolean" }
+      },
+      "required": ["id", "senderId", "senderName", "senderAvatar", "content", "timestamp"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A wallet/monetary transaction log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["Recharge", "Paiement Tontine", "Achat Boutique", "Réception Tontine", "Bonus Parrainage"] },
+        "amount": { "type": "integer" },
+        "date": { "type": "string" },
+        "description": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "type", "amount", "date", "description"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "User notification details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["tontine", "chat", "transaction", "alert"] },
+        "title": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "linkToTab": { "type": "string" }
+      },
+      "required": ["id", "type", "title", "message", "timestamp", "isRead"]
+    },
+    "SystemLog": {
+      "title": "SystemLog",
+      "description": "Audit trail log of member actions for traceability",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["creation_compte", "validation_compte", "creation_tontine", "cotisation", "retrait_wallet", "changement_role", "rejet_compte", "divers"] },
+        "userId": { "type": "string" },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userAvatar": { "type": "string" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "type", "userId", "userName", "userAvatar", "description", "timestamp"]
+    },
+    "DrawCertificate": {
+      "title": "DrawCertificate",
+      "description": "An authentic PDF-like draw certificate",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tontineId": { "type": "string" },
+        "tontineName": { "type": "string" },
+        "winnerName": { "type": "string" },
+        "winnerAvatar": { "type": "string" },
+        "amount": { "type": "integer" },
+        "date": { "type": "string" },
+        "signature": { "type": "string" }
+      },
+      "required": ["id", "tontineId", "tontineName", "winnerName", "winnerAvatar", "amount", "date", "signature"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Public member profiles"
+    },
+    "/users/{userId}/private/info": {
+      "schema": "UserPrivateInfo",
+      "description": "Sensitive user profile private data (phone)"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "Notifications specific to each user"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Wallet and billing transactions of the user"
+    },
+    "/tontines/{tontineId}": {
+      "schema": "Tontine",
+      "description": "Savings groups"
+    },
+    "/tontines/{tontineId}/participants/{participantId}": {
+      "schema": "TontineParticipant",
+      "description": "Individual records of players in a specific savings pool"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Community posts"
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments left on posts"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatThread",
+      "description": "Global and group chat rooms"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Discussion text history of rooms"
+    },
+    "/systemLogs/{logId}": {
+      "schema": "SystemLog",
+      "description": "Platform audit trailing for administrator trace"
+    },
+    "/drawCertificates/{certificateId}": {
+      "schema": "DrawCertificate",
+      "description": "Legitimate rotating lottery certifications"
+    }
+  }
+}

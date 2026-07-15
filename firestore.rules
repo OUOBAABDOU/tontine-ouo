@@ -1,0 +1,276 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Safety Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (getUserRole() == 'Admin' || getUserRole() == 'Super Admin');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 3. Schema & Structural Helpers
+    function isValidUserProfile(data) {
+      return data.id is string 
+        && data.name is string && data.name.size() <= 100
+        && data.avatar is string
+        && data.tier in ['Gratuit', 'Premium', 'VIP', 'Vendeuse']
+        && data.reliabilityScore is int && data.reliabilityScore >= 0 && data.reliabilityScore <= 100
+        && data.walletBalance is int
+        && data.referralCode is string
+        && data.points is int
+        && data.referralsCount is int
+        && data.role in ['Membre', 'Admin', 'Super Admin']
+        && data.status in ['En attente', 'Validé', 'Rejeté']
+        && (!('phone' in data) || data.phone is string)
+        && (!('email' in data) || data.email is string)
+        && (!('password' in data) || data.password is string);
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.phone is string && data.phone.size() <= 20;
+    }
+
+    function isValidTontine(data) {
+      return data.id is string
+        && data.name is string && data.name.size() <= 100
+        && data.type in ['Argent', 'Alimentaire']
+        && data.contributionAmount is int
+        && data.frequency in ['Mensuelle', 'Hebdomadaire']
+        && data.totalPlaces is int
+        && data.status in ['Recrutement', 'En Cours', 'Terminée']
+        && data.description is string && data.description.size() <= 1000
+        && data.nextDrawDate is string
+        && data.drawHistory is list;
+    }
+
+    // Participants Subcollection Helper
+    function isValidTontineParticipant(data) {
+      return data.memberId is string && data.hasPaidThisRound is bool;
+    }
+
+    function isValidPost(data) {
+      return data.id is string
+        && data.memberId is string
+        && data.memberName is string && data.memberName.size() <= 100
+        && data.memberAvatar is string
+        && data.memberTier in ['Gratuit', 'Premium', 'VIP', 'Vendeuse']
+        && data.content is string && data.content.size() <= 2000
+        && data.likes is int
+        && data.commentsCount is int
+        && data.timestamp is string;
+    }
+
+    function isValidComment(data) {
+      return data.id is string
+        && data.memberName is string && data.memberName.size() <= 100
+        && data.content is string && data.content.size() <= 500
+        && data.timestamp is string;
+    }
+
+    function isValidChatThread(data) {
+      return data.id is string
+        && data.name is string && data.name.size() <= 100
+        && data.avatar is string
+        && data.isGroup is bool
+        && data.lastMessage is string && data.lastMessage.size() <= 500
+        && data.lastMessageTime is string
+        && data.unreadCount is int;
+    }
+
+    function isValidMessage(data) {
+      return data.id is string
+        && data.senderId is string
+        && data.senderName is string && data.senderName.size() <= 100
+        && data.senderAvatar is string
+        && data.content is string && data.content.size() <= 1000
+        && data.timestamp is string;
+    }
+
+    function isValidTransaction(data) {
+      return data.id is string
+        && data.type in ['Recharge', 'Paiement Tontine', 'Achat Boutique', 'Réception Tontine', 'Bonus Parrainage']
+        && data.amount is int
+        && data.date is string
+        && data.description is string && data.description.size() <= 200;
+    }
+
+    function isValidNotification(data) {
+      return data.id is string
+        && data.type in ['tontine', 'chat', 'transaction', 'alert']
+        && data.title is string && data.title.size() <= 100
+        && data.message is string && data.message.size() <= 500
+        && data.timestamp is string
+        && data.isRead is bool;
+    }
+
+    function isValidSystemLog(data) {
+      return data.id is string
+        && data.type in ['creation_compte', 'validation_compte', 'creation_tontine', 'cotisation', 'retrait_wallet', 'changement_role', 'rejet_compte', 'divers']
+        && data.userId is string
+        && data.userName is string && data.userName.size() <= 100
+        && data.userAvatar is string
+        && data.description is string && data.description.size() <= 1000
+        && data.timestamp is string;
+    }
+
+    function isValidDrawCertificate(data) {
+      return data.id is string
+        && data.tontineId is string
+        && data.tontineName is string
+        && data.winnerName is string
+        && data.winnerAvatar is string
+        && data.amount is int
+        && data.date is string
+        && data.signature is string;
+    }
+
+    // 4. Match Blocks
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) 
+        && isValidUserProfile(incoming()) 
+        && incoming().role == 'Membre' 
+        && incoming().status == 'En attente'
+        && incoming().walletBalance == 0
+        && incoming().points == 0
+        && incoming().reliabilityScore == 50; // New registers start at 50%
+      
+      allow update: if (isOwner(userId) && isValidUserProfile(incoming()) && (
+        incoming().role == existing().role &&
+        incoming().status == existing().status &&
+        incoming().walletBalance == existing().walletBalance &&
+        incoming().points == existing().points &&
+        incoming().reliabilityScore == existing().reliabilityScore &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'referralCode', 'tier'])
+      )) || isAdmin();
+
+      allow delete: if isAdmin();
+
+      // Split Private Subcollection
+      match /private/info {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create, update: if isOwner(userId) && isValidUserPrivateInfo(incoming());
+        allow delete: if isAdmin();
+      }
+
+      // Notifications Subcollection
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isSignedIn(); // System or users can trigger notifications
+        allow update: if isOwner(userId) && isValidNotification(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      // Transactions Subcollection
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidTransaction(incoming());
+        allow update, delete: if false; // Transactions are immutable audit trails
+      }
+    }
+
+    // --- Tontines Collection ---
+    match /tontines/{tontineId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidTontine(incoming()) && isValidId(tontineId);
+      allow update: if (isSignedIn() && isValidTontine(incoming()) && (
+        // Regular players can pay, which updates drawHistory or other non-admin keys, but keep main immutable
+        incoming().id == existing().id &&
+        incoming().name == existing().name &&
+        incoming().contributionAmount == existing().contributionAmount &&
+        incoming().frequency == existing().frequency
+      )) || isAdmin();
+      allow delete: if isAdmin();
+
+      // Participants Subcollection
+      match /participants/{participantId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && isValidTontineParticipant(incoming());
+        allow delete: if isAdmin();
+      }
+    }
+
+    // --- Community Posts ---
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidPost(incoming()) && incoming().memberId == request.auth.uid && isValidId(postId);
+      allow update: if (isSignedIn() && isValidPost(incoming()) && (
+        // Allow liking and commenting increment
+        incoming().id == existing().id &&
+        incoming().memberId == existing().memberId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['likes', 'commentsCount'])
+      )) || (isSignedIn() && existing().memberId == request.auth.uid && isValidPost(incoming()) && (
+        incoming().id == existing().id &&
+        incoming().memberId == existing().memberId &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['content', 'image'])
+      )) || isAdmin();
+      allow delete: if (isSignedIn() && existing().memberId == request.auth.uid) || isAdmin();
+
+      // Comments Subcollection
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidComment(incoming()) && isValidId(commentId);
+        allow update, delete: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/posts/$(postId)) && get(/databases/$(database)/documents/posts/$(postId)).data.memberId == request.auth.uid);
+      }
+    }
+
+    // --- Chats & Communication ---
+    match /chats/{chatId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidChatThread(incoming()) && isValidId(chatId);
+      allow update: if isSignedIn() && isValidChatThread(incoming());
+      allow delete: if isAdmin();
+
+      // Messages Subcollection
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidMessage(incoming()) && incoming().senderId == request.auth.uid && isValidId(messageId);
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // --- System Actions Trace Log ---
+    match /systemLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isValidSystemLog(incoming()) && isValidId(logId);
+      allow update, delete: if false; // STRICTLY APPEND-ONLY FOR AUDIT TRAIL
+    }
+
+    // --- Draw Certificates ---
+    match /drawCertificates/{certificateId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidDrawCertificate(incoming()) && isValidId(certificateId);
+      allow update, delete: if isAdmin();
+    }
+  }
+}
